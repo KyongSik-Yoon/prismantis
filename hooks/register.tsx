@@ -75,6 +75,7 @@ const drawMarkdown = ($: EngineInterface, el: ReturnType<EngineInterface['ui']['
 }
 
 export const register: Register = (on, options) => {
+  on('engine.create', async (_$, e, next) => ({ ...(await next(e)), prismantis: { markdown: async () => undefined } }))
   if (options.enabled === false) return
   const style = resolveStyle(options)
   const parsed = new Map<string, ReturnType<typeof parse>>()
@@ -166,5 +167,13 @@ export const register: Register = (on, options) => {
         </Box>
       </Box>
     )
+  })
+
+  on('prismantis.markdown', ($, e, next) => {
+    const blocks = parseCached(e.text)
+    if (blocks.length === 0) return next(e)
+    const el = $.ui.resolve({ surface: e.surface, component: 'AssistantMessage' })
+    const { Box } = el
+    return { value: <Box flexDirection="column" rowGap={1} {...(style.reorder && hasRtl(e.text) ? { width: '100%' } : {})}>{drawMarkdown($, el, { ...style, copyButtons: false }, blocks, Math.max(20, e.columns))}</Box> }
   })
 }

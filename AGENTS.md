@@ -8,7 +8,8 @@ Prismantis is a Claude Code mod that redraws assistant replies with themeable co
 | --- | --- |
 | `.claude-plugin/plugin.json` | manifest, every user option (`userConfig`), the `types` contract |
 | `.claude-plugin/marketplace.json` | makes the repo installable with `/plugin marketplace add NahumLitvin/prismantis` |
-| `hooks/register.tsx` | every hook (`ui.render` for AssistantMessage, CommandOutput, ToolUse, ToolGroup and TurnDuration, `prompt.submit`, and the `/prismantis` command via `session.start` and `command.run`) and all code that calls `$` |
+| `hooks/register.tsx` | every hook (`ui.render` for AssistantMessage, CommandOutput, ToolUse, ToolGroup and TurnDuration, `prompt.submit`, the `/prismantis` command via `session.start` and `command.run`, and the `$.prismantis` noun via `engine.create` and `prismantis.markdown`) and all code that calls `$` |
+| `types/index.d.ts` | the contract for `$.prismantis`, which other mods type against |
 | `hooks/markdown.ts` | markdown to blocks and inline nodes, pure |
 | `hooks/render.tsx` | blocks to `Box`/`Text` trees, pure |
 | `hooks/theme.ts` | presets, color validation, option merging, pure |

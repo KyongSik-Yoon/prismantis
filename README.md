@@ -23,6 +23,7 @@ Colorful, themeable replies for [Claude Code](https://claude.com/claude-code): t
 | [Tool rows](#tool-rows) | `Ran gh pr view 12`, `Read ~/src/app.ts`, groups summed up as `Ran 3 commands, read 2 files`, with status dots |
 | [Turn footer](#turn-footer) | `âœ» Baked for 6m 20s` with the duration in the number color |
 | [Slash commands](#slash-commands) | command output (`/cost`, `/context`, plugin commands) gets the same tables and code styling |
+| [Other mods](#other-mods) | `$.prismantis.markdown` draws any markdown the way replies are drawn, for another mod's pane or band |
 | [Diagram hints](#diagram-hints) | a short model-only note on each prompt so Claude reaches for diagrams and charts when they help |
 | [Text](#text) | bold, italic, strikethrough, inline code, links, versions, durations, percentages and paths in their own colors |
 | [Headings, lists, quotes](#headings-lists-quotes) | 4 heading styles, nested lists, task lists, quotes with an accent bar |
@@ -114,6 +115,22 @@ The line that closes a turn keeps Claude Code's word and colors the duration: `â
 ### Slash commands
 
 Output from slash commands, built-in or from other plugins, is parsed as markdown and drawn like a reply, copy buttons included. Errors keep Claude Code's own red line.
+
+### Other mods
+
+A mod that draws markdown in its own pane or band can have prismantis draw it, in the user's theme, by calling `$.prismantis.markdown` with the surface, the text and the columns it has. It answers the tree to draw, or `undefined` when the text holds nothing to draw. Copy buttons are left out, because a button can't cross from one mod to another.
+
+`$.prismantis` is there only while prismantis is installed and enabled, so call it in a `try` and draw your own way when it throws:
+
+```tsx
+let drawn
+try {
+  drawn = await $.prismantis.markdown({ surface: e.surface, text, columns: e.props.bodyColumns })
+} catch {}
+return drawn ?? <Markdown text={text} />
+```
+
+The types are in [types/index.d.ts](types/index.d.ts). List prismantis under `dependencies` in your `plugin.json` to have Claude Code lay them into your `.claude-plugin/types/`, or declare the noun yourself when prismantis is optional.
 
 ### Diagram hints
 

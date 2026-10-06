@@ -17,6 +17,7 @@
     "colors",
     "terminal"
   ],
+  "types": "./types/index.d.ts",
   "userConfig": {
     "enabled": {
       "type": "boolean",
