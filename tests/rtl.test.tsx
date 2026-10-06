@@ -24,7 +24,7 @@ test('pure Hebrew reverses and takes a right base', async () => {
 
 test('a Latin run inside Hebrew keeps its own order', async () => {
   expect(visual('שלום Warp')).toBe('Warp םולש')
-  expect(visual('שרת kore-supervisor רץ על פורט')).toBe('טרופ לע ץר kore-supervisor תרש')
+  expect(visual('שרת web-server רץ על פורט')).toBe('טרופ לע ץר web-server תרש')
 })
 
 test('hyphen and percent around a number follow the Hebrew base', async () => {
