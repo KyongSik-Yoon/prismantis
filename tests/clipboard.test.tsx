@@ -1,7 +1,7 @@
 import { expect, mock, test } from 'claude-code/testing'
 
 import { MAC_TABLE_COPY } from '../hooks/clipboard'
-import { clipboardEnv, recordCopies, recordToasts, runResult } from './clipboard-env'
+import { clipboardEnv, recordCopies, recordToasts, runResult, startSession } from './clipboard-env'
 
 const source = '| Name | Value |\n|--|--:|\n| **שלום** | `$(ignored)` |'
 const plain = 'Name\tValue\nשלום\t$(ignored)'
@@ -22,7 +22,9 @@ test('macOS copies HTML and plain text together', async ($, on) => {
   })
   const copies = recordCopies(on)
   const toasts = recordToasts(on)
+  await startSession($, on)
   const ui = await $.ui.mount(mount)
+  expect((await ui.findAll({ type: 'Button' })).map(button => button.props.label).filter(label => label !== '⧉ copy reply')).toEqual(['⧉ md', '⧉ art', '⧉ html'])
   expect(calls).toHaveLength(0)
   await ui.press({ key: 'html0' })
   expect(calls).toHaveLength(1)
@@ -41,6 +43,7 @@ for (const failure of ['exit', 'refused'] as const) test(`native clipboard ${fai
   on('process.run', () => failure === 'refused' ? { deny: 'Cannot start helper' } : runResult(1, 'Clipboard unavailable'))
   const copies = recordCopies(on)
   const toasts = recordToasts(on)
+  await startSession($, on)
   const ui = await $.ui.mount(mount)
   await ui.press({ key: 'html0' })
   expect(toasts).toEqual([`Copied as plain text (${failure === 'exit' ? 'Clipboard unavailable' : 'macOS clipboard helper failed'})`])
@@ -48,58 +51,50 @@ for (const failure of ['exit', 'refused'] as const) test(`native clipboard ${fai
   await ui.unmount()
 })
 
-for (const variable of ['SSH_CONNECTION', 'SSH_TTY']) test(`${variable} formatted copying falls back to plain text`, async ($, on) => {
-  mock.env(on, { [variable]: 'remote connection' })
-  let nativeCalls = 0
-  on('process.run', () => {
-    nativeCalls++
-    return { deny: 'Must not write the remote host clipboard' }
-  })
-  const copies = recordCopies(on)
-  const toasts = recordToasts(on)
-  const ui = await $.ui.mount(mount)
-  await ui.press({ key: 'html0' })
-  expect(nativeCalls).toBe(0)
-  expect(copies).toEqual([plain])
-  expect(toasts).toEqual(['Copied as plain text (HTML needs a local macOS terminal)'])
-  await ui.unmount()
-})
+const hidden = {
+  'over SSH_CONNECTION': { platform: 'macos', env: { SSH_CONNECTION: 'remote connection' }, surface: 'terminal' },
+  'over SSH_TTY': { platform: 'macos', env: { SSH_TTY: '/dev/ttys001' }, surface: 'terminal' },
+  'on other systems': { platform: 'other', env: { DISPLAY: ':0', WAYLAND_DISPLAY: 'wayland-0' }, surface: 'terminal' },
+  'on desktop': { platform: 'macos', env: {}, surface: 'desktop' },
+} as const
 
-test('desktop table copying copies plain text without the native helper even on macOS', async ($, on) => {
-  clipboardEnv(on, 'macos')
-  const surfaces: (string | undefined)[] = []
-  let nativeCalls = 0
-  on('process.run', () => {
-    nativeCalls++
-    return { deny: 'Must use the surface clipboard' }
-  })
-  on('ui.copy', (_, e) => {
-    surfaces.push(e.surface)
-    expect(e.text).toBe(plain)
-    return { value: { isCopied: true as const } }
-  })
-  const ui = await $.ui.mount({ ...mount, surface: 'desktop' })
-  await ui.press({ key: 'html0' })
-  expect(nativeCalls).toBe(0)
-  expect(surfaces).toEqual(['desktop'])
-  await ui.unmount()
-})
-
-test('other systems copy plain text without native clipboard processes', async ($, on) => {
-  clipboardEnv(on, 'other', { DISPLAY: ':0', WAYLAND_DISPLAY: 'wayland-0' })
+for (const [where, setup] of Object.entries(hidden)) test(`the HTML action is hidden ${where}`, async ($, on) => {
+  clipboardEnv(on, setup.platform, setup.env)
   let processes = 0
   on('process.run', () => {
     processes++
-    return { deny: 'Must use the surface clipboard' }
+    return { deny: 'Must not run the native helper' }
   })
   const copies = recordCopies(on)
-  const toasts = recordToasts(on)
-  const ui = await $.ui.mount(mount)
-  await ui.press({ key: 'html0' })
+  await startSession($, on)
+  const ui = await $.ui.mount({ ...mount, surface: setup.surface })
+  expect((await ui.findAll({ type: 'Button' })).map(button => button.props.label).filter(label => label !== '⧉ copy reply')).toEqual(['⧉ md', '⧉ art'])
+  await ui.press({ key: 'copy0' })
+  expect(copies).toEqual([source])
   expect(processes).toBe(0)
-  expect(copies).toEqual([plain])
-  expect(toasts).toEqual(['Copied as plain text (HTML needs a local macOS terminal)'])
   await ui.unmount()
+})
+
+test('the HTML check runs once, on session start or on the first prompt after a reload', async ($, on) => {
+  let checks = 0
+  mock.env(on, {})
+  on('fs.stat', (_, e, next) => {
+    if (!e.path.replace(/\\/g, '/').endsWith('/usr/bin/osascript')) return next(e)
+    checks++
+    return { value: { kind: 'file' as const, size: 0, mtimeMs: 0, isLink: false } }
+  })
+  on('prompt.submit', (_, e) => ({ text: e.text, context: e.context }))
+  on('session.start', () => ({ cwd: '/tmp' }))
+  const before = await $.ui.mount(mount)
+  expect((await before.findAll({ type: 'Button' })).map(button => button.props.label).filter(label => label !== '⧉ copy reply')).toEqual(['⧉ md', '⧉ art'])
+  await before.unmount()
+  await $.prompt.submit({ text: 'hi', wait: false, origin: { kind: 'composer' } })
+  await $.prompt.submit({ text: 'again', wait: false, origin: { kind: 'composer' } })
+  await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+  const after = await $.ui.mount(mount)
+  expect((await after.findAll({ type: 'Button' })).map(button => button.props.label).filter(label => label !== '⧉ copy reply')).toEqual(['⧉ md', '⧉ art', '⧉ html'])
+  expect(checks).toBe(1)
+  await after.unmount()
 })
 
 for (const key of ['copy0', 'html0']) for (const failure of ['unavailable', 'refused'] as const) test(`${key} reports a ${failure} surface clipboard`, async ($, on) => {
@@ -109,6 +104,7 @@ for (const key of ['copy0', 'html0']) for (const failure of ['unavailable', 'ref
     ? { deny: 'Clipboard denied' }
     : { value: { isCopied: false as const, reason: 'no-clipboard' as const } })
   const toasts = recordToasts(on)
+  await startSession($, on)
   const ui = await $.ui.mount(mount)
   await ui.press({ key })
   expect(toasts).toEqual([failure === 'refused' ? 'Copy failed' : 'Copy failed: no-clipboard'])

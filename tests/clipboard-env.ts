@@ -1,4 +1,5 @@
 import type { On } from 'claude-code'
+import type { Engine } from 'claude-code/testing'
 import { mock } from 'claude-code/testing'
 
 export const clipboardEnv = (on: On, platform: 'macos' | 'other', environment: Record<string, string> = {}) => {
@@ -8,6 +9,11 @@ export const clipboardEnv = (on: On, platform: 'macos' | 'other', environment: R
     : platform === 'macos'
       ? { value: { kind: 'file' as const, size: 0, mtimeMs: 0, isLink: false } }
       : { deny: 'Not macOS' })
+}
+
+export const startSession = async ($: Engine, on: On) => {
+  on('session.start', () => ({ cwd: '/tmp' }))
+  await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
 }
 
 export const runResult = (exitCode: number, stderr = '') =>

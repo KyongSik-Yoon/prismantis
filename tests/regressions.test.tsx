@@ -53,16 +53,17 @@ test('an escaped trailing pipe stays in the cell', async () => {
   expect(table.rows[0]?.[1]?.map(n => ('text' in n ? n.text : '')).join('')).toBe('y|')
 })
 
-for (const surface of ['terminal', 'desktop'] as const) test(`tables copy Markdown, and plain text in place of HTML, without a native clipboard on ${surface}`, async ($, on) => {
+for (const surface of ['terminal', 'desktop'] as const) test(`tables copy their exact Markdown on ${surface}`, async ($, on) => {
   const copied = stubClipboard(on)
   const source = '| a | b |\n|:--|--:|\n| `x\\|y` | **2** |'
   const ui = await $.ui.mount({ ...mount(source), surface })
-  const buttons = await ui.findAll({ type: 'Button' })
-  expect(buttons.map(button => button.props.label)).toEqual(['⧉ md', '⧉ art', '⧉ html'])
   await ui.press({ key: 'copy0' })
-  await ui.press({ key: 'html0' })
-  expect(copied).toEqual([source, 'a\tb\nx|y\t2'])
+  expect(copied).toEqual([source])
   await ui.unmount()
+})
+
+test('tab-separated copying unescapes pipes and drops inline formatting', async () => {
+  expect(tableText(tableOf('| a | b |\n|:--|--:|\n| `x\\|y` | **2** |'))).toBe('a\tb\nx|y\t2')
 })
 
 test('HTML table copying escapes content and preserves safe inline formatting', async () => {

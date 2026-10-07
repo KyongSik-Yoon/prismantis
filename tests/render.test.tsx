@@ -200,7 +200,7 @@ test('back-to-back tables and diagrams share a wrapping row', async $ => {
   await ui.unmount()
 })
 
-test('code blocks, tables and quotes get a copy button, tables art and HTML buttons, the reply a copy reply button', async ($, on) => {
+test('code blocks, tables and quotes get a copy button, tables an art button, the reply a copy reply button', async ($, on) => {
   const copied: string[] = []
   on('ui.copy', (_, e) => {
     copied.push(e.text)
@@ -209,7 +209,7 @@ test('code blocks, tables and quotes get a copy button, tables art and HTML butt
   const text = `${TABLE}\n\n\`\`\`bash\nls -la\n\`\`\`\n\n> reply text\n\nplain paragraph`
   const ui = await $.ui.mount({ ...draw(text), surface: 'terminal' })
   const buttons = await ui.findAll({ type: 'Button' })
-  expect(buttons.length).toBe(6)
+  expect(buttons.length).toBe(5)
   expect(buttons.every(b => b.props.variant === "primary")).toBe(true)
   await ui.press({ key: 'copy1' })
   expect(copied).toEqual(['ls -la'])

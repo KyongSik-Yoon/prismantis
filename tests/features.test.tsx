@@ -265,7 +265,6 @@ test('a full reply draws every element itself, with the right copy buttons', asy
   const labels = (await ui.findAll({ type: 'Button' })).map(b => b.props.label)
   expect(labels.filter(l => l === '⧉ copy').length).toBe(4)
   expect(labels.filter(l => l === '⧉ md').length).toBe(1)
-  expect(labels.filter(l => l === '⧉ html').length).toBe(1)
   expect(labels.filter(l => l === '⧉ source').length).toBe(3)
   expect(labels.filter(l => l === '⧉ art').length).toBe(4)
   expect((await ui.findAll({ type: 'Box' })).some(b => b.props.flexWrap === 'wrap')).toBe(true)
