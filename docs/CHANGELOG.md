@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Tables offer `⧉ md`, `⧉ art` and `⧉ html` copy actions. `⧉ html` copies the table as HTML, with headers, column alignment and inline formatting, together with tab-separated plain text, and verifies both before reporting success. HTML copying works from a local macOS terminal; over SSH, on desktop and on other systems the action copies the plain text alone.
+
 ## [0.12.0] - 2026-10-07
 
 ### Fixed

@@ -1,6 +1,7 @@
-import type { EngineInterface, Register, RenderElement } from 'claude-code'
+import type { EngineInterface, Register, RenderElement, RenderSurface } from 'claude-code'
 
 import { parse } from './markdown'
+import { clipboardCommand } from './clipboard'
 import { boxArt, mermaidText } from './mermaid'
 import type { Drawn } from './render'
 import { remember, renderBlocks, renderExpandedShell, renderToolGroup, renderToolRow, renderTurnDuration, renderUserPrompt, width } from './render'
@@ -48,21 +49,38 @@ const applyRtl = async ($: EngineInterface, style: Style): Promise<Terminal | nu
 
 const expandedCalls = new Set<string>()
 
+const LOCAL_ONLY = 'HTML needs a local macOS terminal'
+
+const copyTable = async ($: EngineInterface, html: string, text: string, surface: RenderSurface): Promise<string | null> => {
+  if (surface !== 'terminal' || await $.env.get('SSH_CONNECTION') || await $.env.get('SSH_TTY')) return LOCAL_ONLY
+  const helper = await $.fs.stat('/usr/bin/osascript').catch(() => null)
+  if (helper?.kind !== 'file') return LOCAL_ONLY
+  const command = clipboardCommand(html, text)
+  const result = await $.process.run(command.argv, { stdin: command.stdin, timeoutMs: 5000 }).catch(() => null)
+  if (!result) return command.failure
+  return result.exitCode === 0 ? null : result.stderr.trim() || command.failure
+}
+
 const drawMarkdown = ($: EngineInterface, el: ReturnType<EngineInterface['ui']['resolve']>, style: Style, blocks: ReturnType<typeof parse>, columns: number, reply?: string): RenderElement[] => {
   const { Button } = el
-  const copy = (text: string | (() => string), key: string, label = '⧉ copy') =>
-    style.copyButtons ? (
+  const copy = (text: string | (() => string), key: string, label = '⧉ copy', html?: () => string) => {
+    const copied = async (surface: RenderSurface): Promise<string> => {
+      const content = typeof text === 'function' ? text() : text
+      const failure = html ? await copyTable($, html(), content, surface) : undefined
+      if (failure === null) return 'Copied formatted table'
+      const result = await $.ui.copy({ text: content, surface })
+      if (!result.isCopied) return `Copy failed: ${result.reason}`
+      return failure ? `Copied as plain text (${failure})` : 'Copied'
+    }
+    return style.copyButtons ? (
       <Button
         key={key}
         variant="primary"
         label={label}
-        onPress={press => {
-          $.ui.copy({ text: typeof text === 'function' ? text() : text, surface: press.surface })
-            .then(r => $.ui.toast(r.isCopied ? 'Copied' : `Copy failed: ${r.reason}`))
-            .catch(() => $.ui.toast('Copy failed'))
-        }}
+        onPress={async press => $.ui.toast(await copied(press.surface).catch(() => 'Copy failed'))}
       />
     ) : null
+  }
   const drawn: Drawn = new Map()
   if (style.mermaid) {
     for (const [i, block] of blocks.entries()) {
