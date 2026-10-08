@@ -10,7 +10,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Fixed
 
-- Mermaid boxes stay closed around Korean, Chinese and Japanese labels. beautiful-mermaid counts each character as one column, so a wide character pushed the right border inward by one column per character. Wide characters are now measured as two columns before layout and drawn in their real width, in flowcharts, sequence diagrams and chart axes alike.
+- Mermaid boxes stay closed around Korean, Chinese and Japanese labels. beautiful-mermaid counts each character as one column, so a wide character pushed the right border inward by one column per character. Wide characters are now measured as two columns before layout and drawn in their real width, in flowcharts, sequence diagrams and chart axes alike ([#56](https://github.com/NahumLitvin/prismantis/pull/56)).
 
 ## [0.12.0] - 2026-10-07
 
