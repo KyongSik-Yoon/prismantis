@@ -1,7 +1,8 @@
 import type { ElementTable, RenderElement } from 'claude-code'
 
+import { tableHtml, tableText } from './html'
 import type { Block, Inline } from './markdown'
-import { inlineText } from './markdown'
+import { displayText, inlineText } from './markdown'
 import { commentTail, commentVisual, flow, hasRtl, terminalLine } from './rtl'
 import type { Style, Theme } from './theme'
 import type { PrismToken } from './vendor/prism.js'
@@ -230,9 +231,6 @@ export const columnWidths = (natural: number[], available: number, gap: number, 
   }
   return widths
 }
-
-const displayText = (inline: Inline[]): string =>
-  inline.map(n => (n.kind === 'link' && n.text !== n.href ? `${n.text} (${n.href})` : 'children' in n ? displayText(n.children) : n.text)).join('')
 
 const isRtlTable = (style: Style, block: Extract<Block, { kind: 'table' }>): boolean => {
   const cells = [...block.header, ...block.rows.flat()].filter(cell => displayText(cell).trim() !== '')
@@ -492,7 +490,7 @@ const renderList = (el: ElementTable, style: Style, block: Extract<Block, { kind
   )
 }
 
-export type CopyButton = (text: string | (() => string), key: string, label?: string) => RenderElement | null
+export type CopyButton = (text: string | (() => string), key: string, label?: string, html?: () => string) => RenderElement | null
 export type Drawn = Map<number, { element: RenderElement; art: string }>
 
 const copySource = (block: Block): string | undefined =>
@@ -537,12 +535,14 @@ export const renderBlocks = (el: ElementTable, style: Style, blocks: Block[], co
     const text = block ? copySource(block) : undefined
     const isPlainCode = block?.kind === 'code' && !drawn.has(b)
     const art = drawn.get(b)?.art ?? (block?.kind === 'table' ? () => tableArt(block) : undefined)
-    const first = text === undefined || isPlainCode ? null : copy?.(text, `copy${b}`, art === undefined || block?.kind === 'table' ? undefined : '⧉ source')
+    const first = text === undefined || isPlainCode ? null : copy?.(text, `copy${b}`, block?.kind === 'table' ? '⧉ md' : art === undefined ? undefined : '⧉ source')
     const second = first && art !== undefined ? copy?.(art, `art${b}`, '⧉ art') : null
+    const html = first && block?.kind === 'table' ? copy?.(() => tableText(block), `html${b}`, '⧉ html', () => tableHtml(block)) : null
     const button = second ? (
       <el.Box key={`copies${b}`} flexDirection="row" columnGap={1}>
         {first}
         {second}
+        {html}
       </el.Box>
     ) : first
     if (!button) return element

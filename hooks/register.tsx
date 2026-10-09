@@ -1,6 +1,7 @@
-import type { EngineInterface, Register, RenderElement } from 'claude-code'
+import type { EngineInterface, Register, RenderElement, RenderSurface } from 'claude-code'
 
 import { parse } from './markdown'
+import { clipboardCommand } from './clipboard'
 import { boxArt, mermaidText } from './mermaid'
 import type { Drawn } from './render'
 import { remember, renderBlocks, renderExpandedShell, renderToolGroup, renderToolRow, renderTurnDuration, renderUserPrompt, width } from './render'
@@ -48,21 +49,39 @@ const applyRtl = async ($: EngineInterface, style: Style): Promise<Terminal | nu
 
 const expandedCalls = new Set<string>()
 
+const canCopyHtml = async ($: EngineInterface): Promise<boolean> => {
+  if (await $.env.get('SSH_CONNECTION') || await $.env.get('SSH_TTY')) return false
+  const helper = await $.fs.stat('/usr/bin/osascript').catch(() => null)
+  return helper?.kind === 'file'
+}
+
+const copyTable = async ($: EngineInterface, html: string, text: string): Promise<string | null> => {
+  const command = clipboardCommand(html, text)
+  const result = await $.process.run(command.argv, { stdin: command.stdin, timeoutMs: 5000 }).catch(() => null)
+  if (!result) return command.failure
+  return result.exitCode === 0 ? null : result.stderr.trim() || command.failure
+}
+
 const drawMarkdown = ($: EngineInterface, el: ReturnType<EngineInterface['ui']['resolve']>, style: Style, blocks: ReturnType<typeof parse>, columns: number, reply?: string): RenderElement[] => {
   const { Button } = el
-  const copy = (text: string | (() => string), key: string, label = '⧉ copy') =>
-    style.copyButtons ? (
+  const copy = (text: string | (() => string), key: string, label = '⧉ copy', html?: () => string) => {
+    const copied = async (surface: RenderSurface): Promise<string> => {
+      const content = typeof text === 'function' ? text() : text
+      const failure = html ? await copyTable($, html(), content) : undefined
+      if (failure === null) return 'Copied formatted table'
+      const result = await $.ui.copy({ text: content, surface })
+      if (!result.isCopied) return `Copy failed: ${result.reason}`
+      return failure ? `Copied as plain text (${failure})` : 'Copied'
+    }
+    return style.copyButtons && (!html || style.htmlCopy) ? (
       <Button
         key={key}
         variant="primary"
         label={label}
-        onPress={press => {
-          $.ui.copy({ text: typeof text === 'function' ? text() : text, surface: press.surface })
-            .then(r => $.ui.toast(r.isCopied ? 'Copied' : `Copy failed: ${r.reason}`))
-            .catch(() => $.ui.toast('Copy failed'))
-        }}
+        onPress={async press => $.ui.toast(await copied(press.surface).catch(() => 'Copy failed'))}
       />
     ) : null
+  }
   const drawn: Drawn = new Map()
   if (style.mermaid) {
     for (const [i, block] of blocks.entries()) {
@@ -85,6 +104,8 @@ export const register: Register = (on, options) => {
   const shared = new Map<string, ReturnType<typeof parse>>()
   let terminal: Terminal | null = null
   const fit = (viewport?: { isFullscreen?: boolean }): Style => (terminal === 'apple-terminal' && viewport?.isFullscreen ? { ...style, shape: 'inverse' } : style)
+  const forSurface = (base: Style, surface: RenderSurface): Style => (surface === 'terminal' || !base.htmlCopy ? base : { ...base, htmlCopy: false })
+  let htmlCopy: Promise<boolean> | undefined
 
   if (options.toolRows !== false) {
     on('ui.render', { component: 'ToolGroup' }, ($, e, next) => {
@@ -102,6 +123,8 @@ export const register: Register = (on, options) => {
 
   on('session.start', async ($, e, next) => {
     terminal = await applyRtl($, style)
+    htmlCopy ??= canCopyHtml($)
+    style.htmlCopy = await htmlCopy
     const started = await next(e)
     await $.command
       .register({ name: 'prismantis', description: 'Switch the prismantis theme, copy the last reply, or show the demo', argumentHint: '[theme <name> | copy [code] | demo]' })
@@ -134,6 +157,8 @@ export const register: Register = (on, options) => {
 
   on('prompt.submit', async ($, e, next) => {
     await applyRtl($, style)
+    htmlCopy ??= canCopyHtml($)
+    style.htmlCopy = await htmlCopy
     if (!style.diagramHints || (e.origin.kind !== 'composer' && e.origin.kind !== 'bridge')) return next(e)
     return next({ ...e, context: [...(e.context ?? []), HINT] })
   })
@@ -145,7 +170,7 @@ export const register: Register = (on, options) => {
     const el = $.ui.resolve(e)
     const { Box } = el
     const columns = Math.max(20, (e.viewport?.columns ?? 100) - 4)
-    return <Box flexDirection="column" rowGap={1} {...(style.reorder && hasRtl(e.props.text) ? { width: '100%' } : {})}>{drawMarkdown($, el, fit(e.viewport), blocks, columns)}</Box>
+    return <Box flexDirection="column" rowGap={1} {...(style.reorder && hasRtl(e.props.text) ? { width: '100%' } : {})}>{drawMarkdown($, el, forSurface(fit(e.viewport), e.surface), blocks, columns)}</Box>
   })
 
   on('ui.render', { component: 'UserMessage' }, ($, e, next) => {
@@ -162,13 +187,14 @@ export const register: Register = (on, options) => {
     const { Box, Text } = el
     const columns = Math.max(20, (e.viewport?.columns ?? 100) - 4)
     const narration = style.toolStyle === 'tree-bold' && blocks.length === 1 && blocks[0]!.kind === 'paragraph'
+    const surfaceStyle = forSurface(fit(e.viewport), e.surface)
     return (
       <Box flexDirection="row">
         <Box width={2} flexShrink={0}>
           <Text color={style.theme.accent}>{e.props.isFirstOfReply ? '●' : ' '}</Text>
         </Box>
         <Box flexDirection="column" rowGap={1} flexGrow={1}>
-          {drawMarkdown($, el, narration ? { ...fit(e.viewport), narration } : fit(e.viewport), blocks, columns, blocks.length > 1 || hasRtl(e.props.text) ? e.props.text : undefined)}
+          {drawMarkdown($, el, narration ? { ...surfaceStyle, narration } : surfaceStyle, blocks, columns, blocks.length > 1 || hasRtl(e.props.text) ? e.props.text : undefined)}
         </Box>
       </Box>
     )
